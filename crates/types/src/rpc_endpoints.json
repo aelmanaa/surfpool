@@ -209,7 +209,7 @@
         },
         {
           "method": "signatureSubscribe",
-          "description": "Subscribes to receive notifications for a given transaction signature.",
+          "description": "Subscribes to receive notifications for a given transaction signature. WebSocket only: call it on the WebSocket port, not over HTTP.",
           "params": [
             {
               "name": "signature",
@@ -230,7 +230,7 @@
         },
         {
           "method": "signatureUnsubscribe",
-          "description": "Unsubscribes from signature notifications.",
+          "description": "Unsubscribes from signature notifications. WebSocket only: call it on the WebSocket port, not over HTTP.",
           "params": [
             {
               "name": "subscriptionId",
@@ -777,16 +777,38 @@
           "returns": "A `RpcResponse<ProfileResult>` containing the estimation details."
         },
         {
-          "method": "surfnet_getProfileResults",
-          "description": "Retrieves all profiling results for a given tag.",
+          "method": "surfnet_getProfileResultsByTag",
+          "description": "Retrieves all profiling results recorded under a given tag (the tag passed to surfnet_profileTransaction).",
           "params": [
             {
               "name": "tag",
               "type": "string",
               "description": "The tag to retrieve profiling results for."
+            },
+            {
+              "name": "config",
+              "type": "Option<RpcProfileResultConfig>",
+              "description": "Optional: { \"encoding\": \"base64\" | \"jsonParsed\" | ..., \"depth\": \"transaction\" | \"instruction\" }. Defaults to jsonParsed encoding and instruction depth."
             }
           ],
-          "returns": "A `RpcResponse<Vec<ProfileResult>>` containing the profiling results."
+          "returns": "A `RpcResponse<Option<Vec<UiKeyedProfileResult>>>` containing the profiling results, or `null` if the tag is unknown."
+        },
+        {
+          "method": "surfnet_getTransactionProfile",
+          "description": "A cheat code to get the profile of a transaction by its signature or by the UUID returned by surfnet_profileTransaction.",
+          "params": [
+            {
+              "name": "signature_or_uuid",
+              "type": "string",
+              "description": "The transaction signature (base-58) or a profile UUID."
+            },
+            {
+              "name": "config",
+              "type": "Option<RpcProfileResultConfig>",
+              "description": "Optional: { \"encoding\": \"base64\" | \"jsonParsed\" | ..., \"depth\": \"transaction\" | \"instruction\" }. Defaults to jsonParsed encoding and instruction depth."
+            }
+          ],
+          "returns": "A `RpcResponse<Option<UiKeyedProfileResult>>` containing the profile if found, or `null`."
         },
         {
           "method": "surfnet_writeProgram",
@@ -874,6 +896,232 @@
             }
           ],
           "returns": "A `RpcResponse<()>` indicating whether the write was successful."
+        },
+        {
+          "method": "surfnet_enableCheatcode",
+          "description": "Re-enables cheatcode methods that were disabled with surfnet_disableCheatcode. Methods locked with {\"lockout\": true} or at startup with --lock-cheatcodes cannot be re-enabled.",
+          "params": [
+            {
+              "name": "cheatcodes",
+              "type": "string | array",
+              "description": "\"all\", or a list of surfnet_* method names, e.g. [\"surfnet_setAccount\", \"surfnet_timeTravel\"]."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the operation was successful."
+        },
+        {
+          "method": "surfnet_disableCheatcode",
+          "description": "Disables cheatcode methods. With {\"lockout\": true} the methods stay disabled for the life of the surfnet; \"all\" with lockout also locks requestAirdrop, the snapshotSubscribe WebSocket import and the admin methods exit, loadPlugin, reloadPlugin and unloadPlugin.",
+          "params": [
+            {
+              "name": "cheatcodes",
+              "type": "string | array",
+              "description": "\"all\", or a list of surfnet_* method names, e.g. [\"surfnet_setAccount\"]."
+            },
+            {
+              "name": "config",
+              "type": "Option<CheatcodeControlConfig>",
+              "description": "Optional: { \"lockout\": true } to lock the disabled methods."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the operation was successful."
+        },
+        {
+          "method": "surfnet_setSupply",
+          "description": "A cheat code to set the network supply information returned by getSupply.",
+          "params": [
+            {
+              "name": "update",
+              "type": "object",
+              "description": "The `SupplyUpdate` struct. All fields are optional and use snake_case."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the supply update was successful."
+        },
+        {
+          "method": "surfnet_setProgramAuthority",
+          "description": "A cheat code to set the upgrade authority of a program's ProgramData account.",
+          "params": [
+            {
+              "name": "program_id",
+              "type": "string",
+              "description": "The base-58 encoded public key of the program."
+            },
+            {
+              "name": "new_authority",
+              "type": "Option<string>",
+              "description": "The base-58 encoded public key of the new authority. If omitted, the program has no upgrade authority."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the authority update was successful."
+        },
+        {
+          "method": "surfnet_registerIdl",
+          "description": "A cheat code to register an Anchor IDL for a program in memory. The IDL's `address` field must match the program's public key.",
+          "params": [
+            {
+              "name": "idl",
+              "type": "object",
+              "description": "The full IDL object."
+            },
+            {
+              "name": "slot",
+              "type": "Option<u64>",
+              "description": "The slot at which to register the IDL. Defaults to the latest slot."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the IDL registration was successful."
+        },
+        {
+          "method": "surfnet_getActiveIdl",
+          "description": "A cheat code to get the IDL registered for a program.",
+          "params": [
+            {
+              "name": "program_id",
+              "type": "string",
+              "description": "The base-58 encoded public key of the program."
+            },
+            {
+              "name": "slot",
+              "type": "Option<u64>",
+              "description": "The slot at which to query the IDL. Defaults to the latest slot."
+            }
+          ],
+          "returns": "A `RpcResponse<Option<Idl>>` containing the IDL, or `null` if none is registered."
+        },
+        {
+          "method": "surfnet_getLocalSignatures",
+          "description": "A cheat code to get the most recent transaction signatures processed by the local surfnet, with their logs.",
+          "params": [
+            {
+              "name": "limit",
+              "type": "Option<u64>",
+              "description": "The maximum number of signatures to return. Defaults to 50."
+            }
+          ],
+          "returns": "A `RpcResponse<Vec<RpcLogsResponse>>`."
+        },
+        {
+          "method": "surfnet_resetAccount",
+          "description": "A cheat code to reset an account on the local network to its remote state.",
+          "params": [
+            {
+              "name": "pubkey",
+              "type": "string",
+              "description": "The base-58 encoded public key of the account to reset."
+            },
+            {
+              "name": "config",
+              "type": "Option<ResetAccountConfig>",
+              "description": "Optional: { \"includeOwnedAccounts\": true } to also reset accounts owned by this pubkey. Defaults to false."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the reset was successful."
+        },
+        {
+          "method": "surfnet_resetNetwork",
+          "description": "A cheat code to reset the whole local network to its initial state.",
+          "params": [],
+          "returns": "A `RpcResponse<()>` indicating whether the reset was successful."
+        },
+        {
+          "method": "surfnet_offlineAccount",
+          "description": "A cheat code to prevent an account from being downloaded from the remote RPC.",
+          "params": [
+            {
+              "name": "pubkey",
+              "type": "string",
+              "description": "The base-58 encoded public key of the account or program to block."
+            },
+            {
+              "name": "config",
+              "type": "Option<OfflineAccountConfig>",
+              "description": "Optional: { \"includeOwnedAccounts\": true } to also block accounts owned by this pubkey. Defaults to false."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the block was registered."
+        },
+        {
+          "method": "surfnet_exportSnapshot",
+          "description": "A cheat code to export a snapshot of the accounts in the Surfnet SVM, keyed by public key.",
+          "params": [
+            {
+              "name": "config",
+              "type": "Option<ExportSnapshotConfig>",
+              "description": "Optional: { \"includeParsedAccounts\": bool, \"filter\": { \"includeProgramAccounts\": bool, \"includeAccounts\": [pubkey], \"excludeAccounts\": [pubkey], \"excludeSysvars\": bool, \"excludeFeatureGates\": bool }, \"scope\": \"network\" | { \"preTransaction\": <signature> } }."
+            }
+          ],
+          "returns": "A `RpcResponse<BTreeMap<String, AccountSnapshot>>` mapping each public key to its account snapshot."
+        },
+        {
+          "method": "surfnet_streamAccount",
+          "description": "A cheat code to mark an account as streamed, so it is fetched from the remote datasource when accessed instead of being cached once.",
+          "params": [
+            {
+              "name": "pubkey",
+              "type": "string",
+              "description": "The base-58 encoded public key of the account to stream."
+            },
+            {
+              "name": "config",
+              "type": "Option<StreamAccountConfig>",
+              "description": "Optional: { \"includeOwnedAccounts\": true } to also stream accounts owned by this pubkey. Defaults to false."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the stream registration was successful."
+        },
+        {
+          "method": "surfnet_streamAccounts",
+          "description": "A cheat code to mark several accounts as streamed at once.",
+          "params": [
+            {
+              "name": "accounts",
+              "type": "array",
+              "description": "A list of { \"pubkey\": <base-58 string>, \"includeOwnedAccounts\": Option<bool> } entries."
+            }
+          ],
+          "returns": "A `RpcResponse<()>` indicating whether the stream registrations were successful."
+        },
+        {
+          "method": "surfnet_getStreamedAccounts",
+          "description": "A cheat code to list the accounts registered with surfnet_streamAccount or surfnet_streamAccounts.",
+          "params": [],
+          "returns": "A `RpcResponse<GetStreamedAccountsResponse>`."
+        },
+        {
+          "method": "surfnet_getSurfnetInfo",
+          "description": "A cheat code to get Surfnet network information, including runbook execution status.",
+          "params": [],
+          "returns": "A `RpcResponse<GetSurfnetInfoResponse>`."
+        },
+        {
+          "method": "surfnet_getConfidentialBalance",
+          "description": "A cheat code to read the decrypted confidential-transfer balances of a Token-2022 token account.",
+          "params": [
+            {
+              "name": "token_account",
+              "type": "string",
+              "description": "The base-58 encoded address of the token account."
+            },
+            {
+              "name": "keys",
+              "type": "object",
+              "description": "{ \"aesKey\": Option<string> (16 bytes, base58/base64; decrypts the available balance), \"elgamalSecretKey\": Option<string> (32 bytes, base58/base64; decrypts the pending balance) }. At least one is required; surfnet_deriveConfidentialKeys returns both."
+            }
+          ],
+          "returns": "A `RpcResponse<GetConfidentialBalanceResponse>` with the decrypted `available` and `pending` amounts and the account's `pendingBalanceCreditCounter`."
+        },
+        {
+          "method": "surfnet_deriveConfidentialKeys",
+          "description": "A cheat code to derive an owner's confidential-transfer keys from the owner's signature, so tests need no client-side confidential-transfer SDK.",
+          "params": [
+            {
+              "name": "signature",
+              "type": "string",
+              "description": "The owner's 64-byte signature over \"solana-conf-bal/v1\" followed by a public seed (normally the token account address), base58 or base64 encoded."
+            }
+          ],
+          "returns": "A `RpcResponse<DeriveConfidentialKeysResponse>` with base58 `elgamalPubkey`, `elgamalSecretKey` and `aesKey`."
         }
       ]
     },
@@ -922,12 +1170,6 @@
           "description": "Returns the start time of the node.",
           "params": [],
           "returns": "The start time."
-        },
-        {
-          "method": "rpcAddress",
-          "description": "Returns the RPC address of the node.",
-          "params": [],
-          "returns": "The RPC address."
         }
       ]
     },
@@ -1393,152 +1635,6 @@
           "description": "Lists loaded plugins.",
           "params": [],
           "returns": "A list of plugin names."
-        },
-        {
-          "method": "addAuthorizedVoter",
-          "description": "Adds an authorized voter.",
-          "params": [
-            {
-              "name": "keypair_file",
-              "type": "string",
-              "description": "The path to the voter's keypair file."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "addAuthorizedVoterFromBytes",
-          "description": "Adds an authorized voter from a byte array.",
-          "params": [
-            {
-              "name": "keypair",
-              "type": "array",
-              "description": "The voter's keypair as a byte array."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "removeAllAuthorizedVoters",
-          "description": "Removes all authorized voters.",
-          "params": [],
-          "returns": null
-        },
-        {
-          "method": "setIdentity",
-          "description": "Sets the identity of the node.",
-          "params": [
-            {
-              "name": "keypair_file",
-              "type": "string",
-              "description": "The path to the identity keypair file."
-            },
-            {
-              "name": "require_tower",
-              "type": "boolean",
-              "description": "Whether to require a tower for the identity."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "setIdentityFromBytes",
-          "description": "Sets the identity of the node from a byte array.",
-          "params": [
-            {
-              "name": "identity_keypair",
-              "type": "array",
-              "description": "The identity keypair as a byte array."
-            },
-            {
-              "name": "require_tower",
-              "type": "boolean",
-              "description": "Whether to require a tower for the identity."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "setStakedNodesOverrides",
-          "description": "Sets the staked nodes overrides.",
-          "params": [
-            {
-              "name": "path",
-              "type": "string",
-              "description": "The path to the overrides file."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "repairShredFromPeer",
-          "description": "Repairs a shred from a peer.",
-          "params": [
-            {
-              "name": "pubkey",
-              "type": "string",
-              "description": "The public key of the peer."
-            },
-            {
-              "name": "slot",
-              "type": "number",
-              "description": "The slot of the shred."
-            },
-            {
-              "name": "shred_index",
-              "type": "number",
-              "description": "The index of the shred."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "setRepairWhitelist",
-          "description": "Sets the repair whitelist.",
-          "params": [
-            {
-              "name": "whitelist",
-              "type": "array",
-              "description": "A list of public keys to whitelist."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "getSecondaryIndexKeySize",
-          "description": "Gets the size of a secondary index key.",
-          "params": [
-            {
-              "name": "pubkey",
-              "type": "string",
-              "description": "The public key to query."
-            }
-          ],
-          "returns": "A map of index types to key sizes."
-        },
-        {
-          "method": "setPublicTpuAddress",
-          "description": "Sets the public TPU address.",
-          "params": [
-            {
-              "name": "address",
-              "type": "string",
-              "description": "The public TPU address to set."
-            }
-          ],
-          "returns": null
-        },
-        {
-          "method": "setPublicTpuForwardsAddress",
-          "description": "Sets the public TPU forwards address.",
-          "params": [
-            {
-              "name": "address",
-              "type": "string",
-              "description": "The public TPU forwards address to set."
-            }
-          ],
-          "returns": null
         }
       ]
     }

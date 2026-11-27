@@ -2782,3 +2782,30 @@ mod simnet_events_tx_tests {
         tx.emit(SimnetEvent::Aborted("no audience".to_string()));
     }
 }
+
+#[cfg(test)]
+mod rpc_endpoints_manifest_tests {
+    use super::SURFNET_CHEATCODE_METHODS;
+
+    /// The MCP server serves `rpc_endpoints.json` as `str:///rpc_endpoints`, and
+    /// agents pick method names from it. Its cheatcodes must be exactly the
+    /// registered `surfnet_*` methods: no missing ones, no names that answer
+    /// `Method not found`.
+    #[test]
+    fn rpc_endpoints_cheatcodes_match_manifest() {
+        let endpoints: serde_json::Value =
+            serde_json::from_str(include_str!("rpc_endpoints.json")).unwrap();
+        let mut listed: Vec<&str> = endpoints["categories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|category| category["endpoints"].as_array().unwrap())
+            .map(|endpoint| endpoint["method"].as_str().unwrap())
+            .filter(|method| method.starts_with("surfnet_"))
+            .collect();
+        listed.sort_unstable();
+        let mut manifest = SURFNET_CHEATCODE_METHODS;
+        manifest.sort_unstable();
+        assert_eq!(listed, manifest);
+    }
+}
